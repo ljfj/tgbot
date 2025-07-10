@@ -2,16 +2,17 @@
 import json
 from typing import Optional, Dict, Any, Tuple
 from telegram.ext import BasePersistence, PersistenceInput
-from vercel_kv import kv
+from vercel_kv import KV
+
+# ✨ 2. 创建一个全局的 KV 实例
+kv = KV()
 
 class VercelKVPersistence(BasePersistence):
-    """
-    使用 Vercel KV 作为持久化后端的优化版本。
-    确保所有数据在存入/取出时都被正确地序列化/反序列化。
-    """
+    """使用 Vercel KV 作为持久化后端的优化版本。"""
     def __init__(self):
         super().__init__(store_data=PersistenceInput(bot_data=True, chat_data=True, user_data=True))
 
+    # ✨ 3. 后续所有对 kv 的调用都不需要改动，因为我们创建了全局实例
     async def _get_json_data(self, key: str) -> Dict:
         """从 KV 获取并解析 JSON 数据的辅助函数。"""
         data = await kv.get(key)
