@@ -66,17 +66,11 @@ app = Starlette()
 @app.route("/", methods=["POST"])
 async def webhook(request: Request) -> Response:
     try:
-        # ✨ 4. 在处理请求前，从持久化存储中加载数据
-        # 这是确保每个实例都能获取最新状态的关键
-        await application.update_persistence()
-        
+       
         data = await request.json()
         update = Update.de_json(data, application.bot)
         await application.process_update(update)
-        
-        # ✨ 5. 在处理请求后，将更新后的数据写回持久化存储
-        await application.flush_persistence()
-        
+                
         return Response(content="OK", status_code=200)
     except Exception as e:
         logging.error(f"Error processing update: {e}", exc_info=True)
