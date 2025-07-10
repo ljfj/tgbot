@@ -1,4 +1,4 @@
-# api/commands/ask.py (使用这个简化版本来测试)
+# api/commands/ask.py (使用这个最简单的版本)
 import logging
 import httpx
 from config import API_URL, API_KEY, MODEL_ID
@@ -8,8 +8,7 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 logger = logging.getLogger(__name__)
 
 async def ask_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not update.message: return
-    if not context.args:
+    if not update.message or not context.args:
         await update.message.reply_text("请在 /ask 后面输入你的问题。")
         return
     
