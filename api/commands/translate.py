@@ -10,11 +10,17 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 API_KEY = os.getenv("AI_TOKEN") 
 
 # ✨ 2. API 端点 (Base URL)
-BASE_URL = "https://api.openai.com/v1"
+API_URL = os.getenv(
+    "AI_API_URL", 
+    "https://api.openai.com/v1"
+)
 
 # ✨ 3. 模型 ID
 # 对于翻译任务，使用一个能力强、速度快的模型即可。
-MODEL_ID = "gpt-3.5-turbo" # 或 "gemini-1.5-flash-latest"
+MODEL_ID = os.getenv(
+    "AI_MODEL_ID", 
+    "gpt-3.5-turbo"
+)
 
 # ✨ 4. 命令触发词
 COMMAND_TRIGGER = "t" # 使用 "t" 作为快捷命令
