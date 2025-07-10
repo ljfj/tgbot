@@ -1,20 +1,16 @@
-# api/index.py
 import os
 import logging
 import json
 import importlib
 import asyncio
 
-from telegram import Update, Bot  # ✨ 1. 从 telegram 顶层导入 Bot
-# ✨ 2. 从 telegram.ext 导入其他扩展类
-from telegram.ext import Application, PicklePersistence
-from telegram.request import HTTPXRequest # ✨ 3. 这个保持不变
-
+from telegram import Update
+# ✨ 1. 从 telegram.ext 导入 ExtBot，不再使用 telegram.Bot
+from telegram.ext import Application, PicklePersistence, ExtBot
+from telegram.request import HTTPXRequest
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import Response
-
-# ... (文件的其余部分完全不需要任何改动) ...
 
 # --- 全局配置 ---
 logging.basicConfig(level=logging.INFO)
@@ -25,27 +21,24 @@ if not TOKEN:
 # --- 持久化配置 ---
 persistence = PicklePersistence(filepath="/tmp/conversation_persistence")
 
-# ✨ 2. 创建一个自定义的 Request 对象
-# 这个 Request 对象在每次需要时都会创建一个新的 httpx.AsyncClient。
-# 这可以完美避免 "Event loop is closed" 的问题，因为每个请求都有自己独立的生命周期。
-# 在无服务器环境中，这是一个非常健壮的模式。
+# --- 自定义 Request 配置 ---
+# 这部分对于解决 event loop 问题仍然是至关重要的
 custom_request = HTTPXRequest(http_version="1.1")
 
-
 # --- 创建 Application 对象 ---
-# ✨ 3. 在 builder 中使用 .bot() 来传入我们自定义的 Bot
-# 我们创建一个包含自定义 request 的 Bot 实例
-custom_bot = Bot(token=TOKEN, request=custom_request)
+# ✨ 2. 使用 ExtBot 来创建我们的自定义 Bot 实例
+# ExtBot 是 Bot 的子类，它包含了持久化等扩展功能所需的全部逻辑。
+custom_ext_bot = ExtBot(token=TOKEN, request=custom_request)
 
 application = (
     Application.builder()
-    .bot(custom_bot) # <-- 使用我们自定义的 Bot
+    .bot(custom_ext_bot) # <-- 使用我们自定义的 ExtBot 实例
     .persistence(persistence)
     .build()
 )
 
 # --- 命令插件加载与注册 ---
-# 这部分保持不变
+# (这部分保持不变)
 def load_and_register_commands(app: Application):
     logger = logging.getLogger(__name__)
     logger.info("Starting to load and register commands...")
@@ -63,8 +56,8 @@ def load_and_register_commands(app: Application):
 
 load_and_register_commands(application)
 
-# --- ✨ 4. 恢复使用全局的 asyncio.run() 来强制初始化 ---
-# 这是确保应用在处理任何请求前都已初始化的最可靠方法。
+# --- 全局初始化 ---
+# (这部分保持不变)
 try:
     asyncio.run(application.initialize())
     logging.info("Application initialized successfully in global scope.")
@@ -73,6 +66,7 @@ except Exception as e:
 
 
 # --- Starlette 应用 ---
+# (这部分保持不变)
 app = Starlette()
 
 @app.route("/", methods=["POST"])
