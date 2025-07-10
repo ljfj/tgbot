@@ -2,10 +2,10 @@ import os
 import logging
 import json
 import importlib
-import asyncio
+# 我们不再需要在全局作用域使用 asyncio
+# import asyncio 
 
 from telegram import Update
-# ✨ 1. 从 telegram.ext 导入 PicklePersistence
 from telegram.ext import Application, PicklePersistence
 from starlette.applications import Starlette
 from starlette.requests import Request
@@ -13,26 +13,25 @@ from starlette.responses import Response
 
 # --- 全局配置 ---
 logging.basicConfig(level=logging.INFO)
-# 注意：我们这里不需要从 config 导入 TELEGRAM_TOKEN，因为 Application.builder() 会直接使用它
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 if not TOKEN:
     raise ValueError("TELEGRAM_TOKEN environment variable not set!")
 
-# ✨ 2. 创建一个持久化对象
-# 我们将数据保存在 Vercel 唯一可写的 /tmp 目录下
+# --- 持久化配置 ---
+# 这部分保持不变
 persistence = PicklePersistence(filepath="/tmp/conversation_persistence")
 
 # --- 创建 Application 对象 ---
-# ✨ 3. 在 builder 中添加 .persistence()
+# 这部分也保持不变，持久化已经启用
 application = (
     Application.builder()
     .token(TOKEN)
-    .persistence(persistence) # <-- 添加这一行来启用持久化
+    .persistence(persistence)
     .build()
 )
 
 # --- 命令插件加载与注册 ---
-# 这部分保持不变
+# 这部分也保持不变
 def load_and_register_commands(app: Application):
     logger = logging.getLogger(__name__)
     logger.info("Starting to load and register commands...")
@@ -50,28 +49,41 @@ def load_and_register_commands(app: Application):
 
 load_and_register_commands(application)
 
-# --- 在全局作用域强制运行异步初始化 ---
-# 这部分保持不变
-try:
-    asyncio.run(application.initialize())
-    logging.info("Application initialized successfully in global scope.")
-except Exception as e:
-    logging.error(f"Failed to initialize application in global scope: {e}", exc_info=True)
-
-
-# --- Starlette 应用 ---
-# 这部分保持不变
+# --- Starlette 应用与正确的初始化流程 ---
 app = Starlette()
+
+@app.on_event("startup")
+async def startup_event():
+    """
+    在 Starlette 应用启动时，执行初始化。
+    Vercel 在处理第一个请求前会触发这个事件。
+    """
+    try:
+        # 在 Starlette 自己的事件循环中初始化机器人
+        await application.initialize()
+        logging.info("Application initialized successfully within Starlette startup event.")
+    except Exception as e:
+        logging.error(f"Failed to initialize application in startup_event: {e}", exc_info=True)
+
+# 我们不需要 shutdown 事件，因为 Vercel 的函数是短暂的
+# @app.on_event("shutdown")
+# async def shutdown_event():
+#     await application.shutdown()
 
 @app.route("/", methods=["POST"])
 async def webhook(request: Request) -> Response:
+    """
+    这个端点现在只负责处理 Webhook 更新。
+    初始化的工作已经交给了 startup 事件。
+    """
     try:
-       
         data = await request.json()
         update = Update.de_json(data, application.bot)
+        # 持久化现在是自动处理的，我们不需要手动调用任何相关方法
         await application.process_update(update)
-                
         return Response(content="OK", status_code=200)
     except Exception as e:
         logging.error(f"Error processing update: {e}", exc_info=True)
         return Response(content="Internal Server Error", status_code=500)
+
+# ✨ 移除了全局的 asyncio.run() 调用。这是最关键的改动。
