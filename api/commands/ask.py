@@ -251,6 +251,11 @@ async def ask_end(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     # 退出对话
     return ConversationHandler.END
 
+# api/commands/ask.py
+
+# ... (上面的代码 ask_start, ask_continue, ask_end 等都保持不变) ...
+
+
 # --- 注册处理器 ---
 def register(app: Application):
     """创建并注册 ConversationHandler。"""
@@ -260,14 +265,14 @@ def register(app: Application):
         entry_points=[CommandHandler("ask", ask_start)],
         states={
             ASKING: [
-                # 匹配所有非命令的文本消息
                 MessageHandler(filters.TEXT & ~filters.COMMAND, ask_continue)
             ]
         },
         fallbacks=[CommandHandler("end", ask_end)],
-        # 设置对话超时时间，单位为秒（例如 10 分钟）
         conversation_timeout=600 
     )
     
-    # 将对话处理器添加到 application
-    app.add_handler(conv_handler)
+    # ✨ 关键改动：将对话处理器添加到一个特定的组（例如组 0）
+    # 默认情况下，所有 handler 都在组 0。通过明确指定，
+    # 我们可以更好地控制流程，并确保 ConversationHandler 的状态逻辑被优先处理。
+    app.add_handler(conv_handler, group=0)
