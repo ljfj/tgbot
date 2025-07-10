@@ -260,9 +260,18 @@ async def ask_end(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 def register(app: Application):
     """创建并注册 ConversationHandler。"""
     
+    # ✨ 确保这里的定义是完整的
     conv_handler = ConversationHandler(
-        # ... (内部定义不变) ...
+        entry_points=[CommandHandler("ask", ask_start)],
+        states={
+            ASKING: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, ask_continue)
+            ]
+        },
+        fallbacks=[CommandHandler("end", ask_end)],
+        # conversation_timeout 依赖 JobQueue，暂时可以注释掉或保留
+        # conversation_timeout=600 
     )
     
-    # 恢复到最简单的版本
+    # 将对话处理器添加到 application
     app.add_handler(conv_handler)
