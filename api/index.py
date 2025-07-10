@@ -1,16 +1,20 @@
+# api/index.py
 import os
 import logging
 import json
 import importlib
 import asyncio
 
-from telegram import Update
-# ✨ 1. 导入 Bot, HTTPXRequest
-from telegram.ext import Application, PicklePersistence, Bot
-from telegram.request import HTTPXRequest
+from telegram import Update, Bot  # ✨ 1. 从 telegram 顶层导入 Bot
+# ✨ 2. 从 telegram.ext 导入其他扩展类
+from telegram.ext import Application, PicklePersistence
+from telegram.request import HTTPXRequest # ✨ 3. 这个保持不变
+
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import Response
+
+# ... (文件的其余部分完全不需要任何改动) ...
 
 # --- 全局配置 ---
 logging.basicConfig(level=logging.INFO)
