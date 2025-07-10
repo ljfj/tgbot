@@ -2,12 +2,13 @@ import os
 import logging
 import json
 import importlib
-import asyncio
+# 我们不再需要在全局作用域使用 asyncio
+# import asyncio 
 
 from telegram import Update
-# ✨ 1. 从 telegram.ext 导入 ExtBot，不再使用 telegram.Bot
 from telegram.ext import Application, PicklePersistence, ExtBot
-from telegram.request import HTTPXRequest
+# 我们不再需要自定义 request，因为我们将使用正确的事件循环管理
+# from telegram.request import HTTPXRequest 
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import Response
@@ -21,18 +22,13 @@ if not TOKEN:
 # --- 持久化配置 ---
 persistence = PicklePersistence(filepath="/tmp/conversation_persistence")
 
-# --- 自定义 Request 配置 ---
-# 这部分对于解决 event loop 问题仍然是至关重要的
-custom_request = HTTPXRequest(http_version="1.1")
-
 # --- 创建 Application 对象 ---
-# ✨ 2. 使用 ExtBot 来创建我们的自定义 Bot 实例
-# ExtBot 是 Bot 的子类，它包含了持久化等扩展功能所需的全部逻辑。
-custom_ext_bot = ExtBot(token=TOKEN, request=custom_request)
-
+# ✨ 1. 回归到最标准的 Application 创建方式
+# 我们只提供 token 和 persistence。让 Application 自己去创建内部的 ExtBot。
+# 这能确保所有内部组件都正确地相互连接。
 application = (
     Application.builder()
-    .bot(custom_ext_bot) # <-- 使用我们自定义的 ExtBot 实例
+    .token(TOKEN)
     .persistence(persistence)
     .build()
 )
@@ -56,26 +52,42 @@ def load_and_register_commands(app: Application):
 
 load_and_register_commands(application)
 
-# --- 全局初始化 ---
-# (这部分保持不变)
-try:
-    asyncio.run(application.initialize())
-    logging.info("Application initialized successfully in global scope.")
-except Exception as e:
-    logging.error(f"Failed to initialize application in global scope: {e}", exc_info=True)
-
-
-# --- Starlette 应用 ---
-# (这部分保持不变)
+# --- Starlette 应用与正确的初始化流程 ---
 app = Starlette()
+
+# ✨ 2. 恢复使用 startup 和 shutdown 事件
+# 这是处理异步应用生命周期的标准方法
+@app.on_event("startup")
+async def startup_event():
+    """
+    在 Starlette 应用启动时，执行初始化。
+    """
+    # 持久化数据会在 initialize() 中被加载
+    await application.initialize()
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """
+    在 Starlette 应用关闭时，确保持久化数据被保存。
+    """
+    await application.shutdown()
 
 @app.route("/", methods=["POST"])
 async def webhook(request: Request) -> Response:
+    """
+    这个端点现在只负责处理 Webhook 更新。
+    """
     try:
         data = await request.json()
         update = Update.de_json(data, application.bot)
+        
+        # ✨ 3. process_update 会自动处理持久化数据的加载和保存
+        # 我们不需要手动调用任何 update/flush 方法
         await application.process_update(update)
+        
         return Response(content="OK", status_code=200)
     except Exception as e:
         logging.error(f"Error processing update: {e}", exc_info=True)
         return Response(content="Internal Server Error", status_code=500)
+
+# ✨ 4. 彻底移除了全局的 asyncio.run() 调用。
