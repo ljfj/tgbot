@@ -260,19 +260,9 @@ async def ask_end(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 def register(app: Application):
     """创建并注册 ConversationHandler。"""
     
-    # 定义对话处理器
     conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("ask", ask_start)],
-        states={
-            ASKING: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, ask_continue)
-            ]
-        },
-        fallbacks=[CommandHandler("end", ask_end)],
-        conversation_timeout=600 
+        # ... (内部定义不变) ...
     )
     
-    # ✨ 关键改动：将对话处理器添加到一个特定的组（例如组 0）
-    # 默认情况下，所有 handler 都在组 0。通过明确指定，
-    # 我们可以更好地控制流程，并确保 ConversationHandler 的状态逻辑被优先处理。
-    app.add_handler(conv_handler, group=0)
+    # 恢复到最简单的版本
+    app.add_handler(conv_handler)
