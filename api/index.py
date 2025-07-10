@@ -1,35 +1,41 @@
 import os
 import logging
+import json
 import importlib
+import asyncio
+
 from telegram import Update
-from telegram.ext import Application
+# ✨ 1. 从 telegram.ext 导入 PicklePersistence
+from telegram.ext import Application, PicklePersistence
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import Response
 
 # --- 全局配置 ---
-# 只有这些配置信息是全局的，它们是无状态的
 logging.basicConfig(level=logging.INFO)
+# 注意：我们这里不需要从 config 导入 TELEGRAM_TOKEN，因为 Application.builder() 会直接使用它
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 if not TOKEN:
     raise ValueError("TELEGRAM_TOKEN environment variable not set!")
 
-# --- Starlette 应用 ---
-# 我们只在全局创建一个空的 Web 应用骨架
-app = Starlette()
+# ✨ 2. 创建一个持久化对象
+# 我们将数据保存在 Vercel 唯一可写的 /tmp 目录下
+persistence = PicklePersistence(filepath="/tmp/conversation_persistence")
 
-# --- 核心 Webhook 逻辑 ---
-@app.route("/", methods=["POST"])
-async def webhook(request: Request) -> Response:
-    """
-    为每个请求创建一个全新的、独立的 Application 实例。
-    这是在无服务器环境中最健壮的模式。
-    """
-    
-    # 1. 在函数内部创建 application，它的生命周期与本次请求相同
-    application = Application.builder().token(TOKEN).build()
+# --- 创建 Application 对象 ---
+# ✨ 3. 在 builder 中添加 .persistence()
+application = (
+    Application.builder()
+    .token(TOKEN)
+    .persistence(persistence) # <-- 添加这一行来启用持久化
+    .build()
+)
 
-    # 2. 动态加载所有命令处理器到这个新实例上
+# --- 命令插件加载与注册 ---
+# 这部分保持不变
+def load_and_register_commands(app: Application):
+    logger = logging.getLogger(__name__)
+    logger.info("Starting to load and register commands...")
     commands_dir = os.path.join(os.path.dirname(__file__), 'commands')
     for filename in os.listdir(commands_dir):
         if filename.endswith(".py") and filename != "__init__.py":
@@ -37,26 +43,41 @@ async def webhook(request: Request) -> Response:
             try:
                 module = importlib.import_module(module_name)
                 if hasattr(module, "register"):
-                    module.register(application)
+                    module.register(app)
+                    logger.info(f"Successfully registered handlers from: {module_name}")
             except Exception as e:
-                logging.error(f"Failed to load module {module_name}: {e}")
-    
-    # 3. 在处理请求前，先初始化这个全新的 application
-    await application.initialize()
-    
+                logger.error(f"Failed to load module {module_name}: {e}")
+
+load_and_register_commands(application)
+
+# --- 在全局作用域强制运行异步初始化 ---
+# 这部分保持不变
+try:
+    asyncio.run(application.initialize())
+    logging.info("Application initialized successfully in global scope.")
+except Exception as e:
+    logging.error(f"Failed to initialize application in global scope: {e}", exc_info=True)
+
+
+# --- Starlette 应用 ---
+# 这部分保持不变
+app = Starlette()
+
+@app.route("/", methods=["POST"])
+async def webhook(request: Request) -> Response:
     try:
-        # 4. 正常处理请求
+        # ✨ 4. 在处理请求前，从持久化存储中加载数据
+        # 这是确保每个实例都能获取最新状态的关键
+        await application.update_persistence()
+        
         data = await request.json()
         update = Update.de_json(data, application.bot)
         await application.process_update(update)
         
+        # ✨ 5. 在处理请求后，将更新后的数据写回持久化存储
+        await application.flush_persistence()
+        
         return Response(content="OK", status_code=200)
-    
     except Exception as e:
         logging.error(f"Error processing update: {e}", exc_info=True)
         return Response(content="Internal Server Error", status_code=500)
-    
-    finally:
-        # 5. 在请求结束时，无论成功与否，都优雅地关闭 application
-        # 这会正确地清理所有网络连接，避免“事件循环已关闭”的错误
-        await application.shutdown()
