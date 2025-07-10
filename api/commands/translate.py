@@ -55,7 +55,7 @@ async def translate_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         }
     else:
         headers["Authorization"] = f"Bearer {API_KEY}"
-        api_url = f"{BASE_URL}/chat/completions"
+        api_url = f"{API_URL}"
         # OpenAI & 兼容服务的 System Prompt 在 messages 数组的第一个元素
         data = {
             "model": MODEL_ID,
