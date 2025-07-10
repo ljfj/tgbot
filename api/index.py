@@ -11,7 +11,7 @@ from telegram.ext import Application, JobQueue
 from .kv_persistence import VercelKVPersistence # 导入我们自己的持久化类
 
 logging.basicConfig(level=logging.INFO)
-TOKEN = os.getenv("TOKEN") # Vercel 会自动注入 KV 相关的环境变量
+TOKEN = os.getenv("TELEGRAM_TOKEN") # Vercel 会自动注入 KV 相关的环境变量
 
 class handler(BaseHTTPRequestHandler):
     def do_POST(self):
